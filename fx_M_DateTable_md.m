@@ -30,14 +30,22 @@
 // SequentialDayNumber - номер дня в таблице по порядку
 // SequentialDayNumberReverse - номер дня в таблице в обратном порядке
 
-( 
+/*( 
   StartDateParameter        as date, 
   EndDateParameter          as date, 
   CultureParameter          as nullable text, 
   IsRuHolidaysParameter     as nullable logical
-) =>
+) =>*/
 
 let
+
+ StartDateParameter = #date(2015, 1, 1), 
+ //EndDateParameter = Date.AddDays(DateTime.Date(DateTime.FixedLocalNow()),90), 
+ EndDateParameter = #date(2019, 12, 31), 
+ CultureParameter = "RU-ru",
+ IsRuHolidaysParameter = 0,
+
+    /*
     MONTHS_ORDERED_BY_DEFAULT = {
         "Январь", "Февраль", "Март",
         "Апрель", "Май", "Июнь", 
@@ -147,6 +155,7 @@ let
       List.Buffer( 
         try ListOfHoliday otherwise {} 
       ),
+*/
 
     DayCount = 
       Duration.Days( 
@@ -169,99 +178,172 @@ let
           {"Date", type date } 
         } 
       ),
+
+///////// start inserting columns //////////////////////
     
     InsertYear = 
-      Table.AddColumn( ChangedType, "Year", each 
+      Table.AddColumn( ChangedType, "Calendar Year", each 
         Date.Year( [Date] ), 
         Int64.Type
       ),
+
     
     InsertQuarter = 
-      Table.AddColumn( InsertYear, "QuarterOfYear", each 
+      Table.AddColumn( InsertYear, "Calendar QuarterNumber", each 
         Date.QuarterOfYear( [Date] ),
         Int64.Type
       ),
     
     InsertMonth = 
-      Table.AddColumn( InsertQuarter, "MonthOfYear", each
+      Table.AddColumn( InsertQuarter, "Calendar MonthNumber", each
         Date.Month( [Date] ),
         Int64.Type 
       ),
     
     InsertDay = 
-      Table.AddColumn( InsertMonth, "MonthDayNumber", each
+      Table.AddColumn( InsertMonth, "Day of Month", each
         Date.Day( [Date] ),
         Int64.Type
       ),
+
+    InsertDayName = 
+      Table.AddColumn(InsertDay, "Day Name", each 
+        Date.ToText( [Date], "dd", CultureParameter ),
+        type text
+      ),
     
     InsertDayInt = 
-      Table.AddColumn( InsertDay, "DateInt", each 
-        [Year] * 10000 + [MonthOfYear] * 100 + [MonthDayNumber],
+      Table.AddColumn( InsertDayName, "DateKey", each 
+        [Calendar Year] * 10000 + [Calendar MonthNumber] * 100 + [Day of Month],
         Int64.Type
       ),
     
     InsertYearMonthNumber = 
-      Table.AddColumn( InsertDayInt, "YearMonthNumber", each 
-        [Year] * 100 + [MonthOfYear] * 1,
+      Table.AddColumn( InsertDayInt, "Calendar YearMonthNumber", each 
+        [Calendar Year] * 100 + [Calendar MonthNumber] * 1,
         Int64.Type
       ),
     
     InsertMonthName = 
-      Table.AddColumn( InsertYearMonthNumber, "MonthName", each 
+      Table.AddColumn( InsertYearMonthNumber, "Calendar Month", each 
         Date.ToText( [Date], "MMMM", CultureParameter ),
         type text
       ),
+
+    InsertMonthDays = 
+      Table.AddColumn( InsertMonthName, "Calendar MonthDays", each 
+        Date.DaysInMonth([Date]),
+        Int64.Type
+      ),
     
     InsertCalendarMonth = 
-      Table.AddColumn( InsertMonthName, "MonthInCalendar", each
-        ( try ( Text.Range( [MonthName], 0, 3 ) ) otherwise [MonthName] ) & " " & Number.ToText( [Year] ),
+      Table.AddColumn( InsertMonthDays, "Calendar Month Year", each
+        ( try ( Text.Range( [Calendar Month], 0, 3 ) ) otherwise [Calendar Month] ) & " " & Number.ToText( [Calendar Year] ),
         type text
       ),
     
-    InsertCalendarQtr = 
-      Table.AddColumn( InsertCalendarMonth, "QuarterInCalendar", each 
-        "Q" & Number.ToText( [QuarterOfYear] ) & " " & Number.ToText( [Year] ),
+    InsertCalendarQtrYear = 
+      Table.AddColumn( InsertCalendarMonth, "Calendar Quarter Year", each 
+        "Q" & Number.ToText( [Calendar QuarterNumber] ) & " " & Number.ToText( [Calendar Year] ),
         type text
+      ),
+
+    InsertCalendarQtr = 
+      Table.AddColumn( InsertCalendarQtrYear, "Calendar Quarter", each 
+        "Q" & Number.ToText( [Calendar QuarterNumber] ),
+        type text
+      ),
+    
+    InsertQuartersDays = 
+      Table.AddColumn( InsertCalendarQtr, "Calendar QuarterDays", each 
+        Number.From(Date.EndOfQuarter([Date])) - Number.From(Date.StartOfQuarter([Date])) + 1,
+        Int64.Type
       ),
     
     InsertDayWeek = 
-      Table.AddColumn(InsertCalendarQtr, "DayInWeek", each 
+      Table.AddColumn(InsertQuartersDays, "WeekDayNumber", each 
         Date.DayOfWeek( [Date], Day.Monday ) + 1, 
         Int64.Type
       ),
     
-    InsertDayName = 
-      Table.AddColumn(InsertDayWeek, "DayOfWeekName", each 
-        Date.ToText( [Date], "dddd", CultureParameter ),
-        type text
-      ),
     
+    // Not in DAX template
     InsertWeekEnding = 
-      Table.AddColumn(InsertDayName, "WeekEnding", each 
+      Table.AddColumn(InsertDayWeek, "Calendar WeekEnding", each 
         Date.EndOfWeek( [Date], Day.Monday ),
         type date
       ),
     
+    // Not in DAX template
     InsertedStartofWeek = 
-      Table.AddColumn(InsertWeekEnding, "StartOfWeek", each
+      Table.AddColumn(InsertWeekEnding, "Calendar StartOfWeek", each 
         Date.StartOfWeek( [Date], Day.Monday ),
         type date
       ),
     
     InsertedStartofMonth = 
-      Table.AddColumn(InsertedStartofWeek, "StartOfMonth", each 
+      Table.AddColumn(InsertedStartofWeek, "Calendar StartOfMonth", each 
         Date.StartOfMonth( [Date] ),
         type date
       ),
+
+    InsertedStartofQuarter = 
+      Table.AddColumn(InsertedStartofMonth, "Calendar StartOfQuarter", each 
+        Date.StartOfQuarter( [Date] ),
+        type date
+      ),
+
+    InsertedStartofYear = 
+      Table.AddColumn(InsertedStartofQuarter, "Calendar StartOfYear", each 
+        Date.StartOfYear( [Date] ),
+        type date
+      ),
     
+    InsertedEndofWeek = 
+      Table.AddColumn(InsertedStartofYear, "Calendar EndOfWeek", each 
+        Date.EndOfWeek( [Date] ),
+        type date
+      ),
+
+    InsertedEndofMonth = 
+      Table.AddColumn(InsertedEndofWeek, "Calendar EndOfMonth", each 
+        Date.EndOfMonth( [Date] ),
+        type date
+      ),
+
+    InsertedEndofQuarter = 
+      Table.AddColumn(InsertedEndofMonth, "Calendar EndOfQuarter", each 
+        Date.EndOfQuarter( [Date] ),
+        type date
+      ),
+
+    InsertedEndofYear = 
+      Table.AddColumn(InsertedEndofQuarter, "Calendar EndOfYear", each 
+        Date.EndOfYear( [Date] ),
+        type date
+      ),
+
     InsertWeekofYear = 
-      Table.AddColumn(InsertedStartofMonth, "WeekOfYear", each 
+      Table.AddColumn(InsertedEndofYear, "Calendar WeekNumber", each 
         Date.WeekOfYear( [Date], Day.Monday ),
         Int64.Type
       ),
+
+/////////////week week week /////////////////////////////////////
+    InsertCalendarWeekYear = 
+      Table.AddColumn( InsertWeekofYear, "Calendar Week Year", each 
+        "W" & Text.PadStart(Text.From([Calendar WeekNumber]),2,"0") & "-" & Number.ToText( [Calendar Year] ),
+        type text
+      ),
+
+    InsertCalendarWeek = 
+      Table.AddColumn( InsertCalendarWeekYear, "Calendar Week", each 
+        "W" & Text.PadStart(Text.From([Calendar WeekNumber]),2,"0"),
+        type text
+      ),
     
     InsertDayofYear = 
-      Table.AddColumn(InsertWeekofYear, "DayOfYear", each 
+      Table.AddColumn(InsertCalendarWeek, "Sequential365DayNumber", each 
         Date.DayOfYear( [Date] ),
         Int64.Type
         ),
@@ -269,39 +351,42 @@ let
     listBufferMonths = 
       List.Buffer(
         List.Distinct(
-          InsertDayofYear[StartOfMonth]
+          InsertDayofYear[Calendar StartOfMonth]
         )
         ),
     
+    // Not in DAX template
     AddedNumberOfMonth = 
       Table.AddColumn( InsertDayofYear, "SequentialMonthNumber", each
-        List.PositionOf( listBufferMonths, [StartOfMonth]) + 1,
+        List.PositionOf( listBufferMonths, [Calendar StartOfMonth]) + 1,
         Int64.Type
       ),
-    
+
+    // Not in DAX template
     SequentialMonthNumberReverse = 
       Table.AddColumn( AddedNumberOfMonth, "SequentialMonthNumberReverse", each
         List.PositionOf(
           List.Reverse( listBufferMonths ),
-          [StartOfMonth]
+          [Calendar StartOfMonth]
         ) + 1,
         Int64.Type
       ),
     
     listBufferWeeks =
       List.Buffer( 
-        List.Distinct( SequentialMonthNumberReverse[StartOfWeek] )
+        List.Distinct( SequentialMonthNumberReverse[Calendar StartOfWeek] )
       ),
     
+    // Not in DAX template
     AddedNumberOfWeeks = 
       Table.AddColumn( SequentialMonthNumberReverse, "SequentialWeekNumber", each
-        List.PositionOf( listBufferWeeks, [StartOfWeek] ) + 1,
+        List.PositionOf( listBufferWeeks, [Calendar StartOfWeek] ) + 1,
         Int64.Type
       ),
-
+    // Not in DAX template
     AddedNumberOfWeeksReverse = 
       Table.AddColumn( AddedNumberOfWeeks, "SequentialWeekNumberReverse", each
-        List.PositionOf( List.Reverse( listBufferWeeks ), [StartOfWeek] ) + 1,
+        List.PositionOf( List.Reverse( listBufferWeeks ), [Calendar StartOfWeek] ) + 1,
         Int64.Type
       ),
     
@@ -320,7 +405,65 @@ let
         List.Max( InsertSequentialDayNumber[SequentialDayNumber] ),
         -1 
       ),
+    ///////////////// Previous Dates /////////////////////////////
 
+    InsertPreviousMonthDate = 
+        Table.AddColumn(
+            InsertSequentialDayNumberReverse, 
+            "Calendar DatePreviousMonth", each Date.AddMonths([Date], -1),
+            Date.Type
+        ),
+
+    InsertPreviousQuarterDate = 
+        Table.AddColumn(
+            InsertPreviousMonthDate, 
+            "Calendar DatePreviousQuarter", each Date.AddQuarters([Date], -1),
+            Date.Type
+        ),
+
+    InsertPreviousWeekDate = 
+        Table.AddColumn(
+            InsertPreviousQuarterDate, 
+            "Calendar DatePreviousWeek", each Date.AddWeeks([Date], -1),
+            Date.Type
+        ),
+
+    InsertPreviousYearDate = 
+        Table.AddColumn(
+            InsertPreviousWeekDate, 
+            "Calendar DatePreviousYear", each Date.AddYears([Date], -1),
+            Date.Type
+        ),
+
+///////////////// Days of Period /////////////////////////////
+
+// Calendar DayOfMonthNumber
+// Calendar DayOfQuarterNumber
+// Calendar DayOfYearNumber
+
+    InsertDayOfMonthNumber = 
+        Table.AddColumn(
+            InsertPreviousYearDate, 
+            "Calendar DayOfMonthNumber", each Number.From([Date]) - Number.From([Calendar StartOfMonth]) +1,
+            Int64.Type
+        ),
+
+    InsertDayOfQuarterNumber = 
+        Table.AddColumn(
+            InsertDayOfMonthNumber, 
+            "Calendar DayOfQuarterNumber", each Number.From([Date]) - Number.From([Calendar StartOfQuarter]) +1,
+            Int64.Type
+        ),
+
+    InsertDayOfYearNumber = 
+        Table.AddColumn(
+            InsertDayOfQuarterNumber, 
+            "Calendar DayOfYearNumber", each Date.DayOfYear([Date]),
+            Int64.Type
+        ),
+    LastStep = InsertDayOfYearNumber
+
+   /* 
     insertRuHolidaysColumn = 
       Table.AddColumn( InsertSequentialDayNumberReverse, "Holiday", each
         if List.Count( CheckIfThereIsHolidayList ) = 0 
@@ -340,8 +483,16 @@ let
           then true 
           else false
       )
+
+    */
     
+//in
+  //if IsRuHolidaysParameter
+  //then insertRuShortdaysColumn
+  //else InsertSequentialDayNumberReverse
+  //InsertSequentialDayNumberReverse,
+
+    //#"Вызванная функцияFunCreatCal2" = FunCreatCal(#date(2013, 1, 1), #date(2019, 12, 31), "Ru-ru", true),
+
 in
-  if IsRuHolidaysParameter
-  then insertRuShortdaysColumn
-  else InsertSequentialDayNumberReverse
+   LastStep
